@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+    <link rel='stylesheet' id='pofo-google-font-css'  href='//fonts.googleapis.com/css?family=Noto+Sans%3A100%2C300%2C400%2C500%2C700%2C900&#038;subset=latin-ext&#038;display=swap' type='text/css' media='all' />
+    <title>Architecture</title>
+  </head>
+  <body style="font-family: 'Noto Sans CJK TC'; font-style: normal; src: url('//fonts.gstatic.com/ea/notosanstc/v1/NotoSansTC-Bold.otf') format('otf'); font-size:20px">
+    <p>
+      偶然看到 TGONext 活動的文章，很幸運地錄取了。我選的是架構組。這是一個為期半年，每月聚會一次的活動。第一次組聚，我們把想討論的主題寫在便利貼上，然後大家投票。選出了高併發高流量、database、微服務、domain driven design、log tracing 等等主題。
+    </p>
+    <p>
+      效能相關的主題，討論了 concurrency。Concurrency 是以秒為單位。推薦的壓力測試工具是 <a href="https://github.com/giltene/wrk2">Wrk 2</a> 與 <a href="https://github.com/tsenart/vegeta">Vegeta</a>。
+        壓力測試工具中，只有 <a href="https://jmeter.apache.org">JMeter</a> 有分佈式的測試方式。<a href="https://httpd.apache.org/docs/2.4/programs/ab.html">ab (Apache Bench)</a> 是比較暴力的壓力測試工具。
+        發起壓力測試的主機與被測主機，要分開來。盡量不要在內網測試。如果是 AWS 的主機，要用不同的 zone 來測 (跨區測試)。先用 10 或 30 個 concurrences 打出去，再用封包工具看。
+    </p>
+    <p>
+      要具備跨團隊溝通的能力。例如 Marketing 要的指標是 MAU (Monthly Activited Users) 與 DAU (Daily Activited Users)。如何打造能支撐一百萬 DAU 的系統呢？首先把 MAU 或 DAU 轉換成較明確的 QPS (Queries per second) 或 TPS (Transactions per second)，再來設計能支撐這麼多 QPS 的系統架構。
+        弄清楚 SLA (Service Level Agreement)、SLO (Service Level Objective)、SLI (Service Level Indicator) 的區別。SLA 是與客戶簽的法律文件，明訂我方提供的系統服務有多高的性能與可靠度要求。例如 4 個 9，表示系統有 99.9999% 的時間都是正常運作。SLO 是設定給技術團隊的目標，達到 SLO 才能滿足 SLA。SLI 是效能或可靠度指標的實際測量值。SLI 要至少稍微超出 SLA 的規定。
+    </p>
+    <p>
+      談系統架構的演進：一開始是單機，所有功能都佈署在同一台主機。再來是雙主機：一台網頁伺服器、一台資料庫，把資料庫獨立出來。再來是加 load balancer。再來是加 cache server，放在網頁伺服器前面，或網頁伺服器與資料庫之間。再來是拆分各個服務。這也就是 Monoliths 到 Modularity 到 Microservices 的架構演進之路。
+        API gateway 是中心化的做法，因為所有傳訊都要經過它。另一種做法是 sidecar。Sidecar 降低我們做 service match 或 microservice 的門檻，因為 sidecars 可以各自為政。繼續改善架構：在資料庫外面包一層 GraphQL、替 API 加 rate limiter 或 threshold。做好 auto scaling。如果團隊技術能力還不夠，不要用 cache，Cache 沒設定好會造成雪崩效應。Redis 強調它在重啟之後，能載入之前的資料。
+    </p>
+    <p>
+      Microservice 一定要做好 log tracing。一些工具：<a href="https://opentracing.io/docs/overview/">OpenTracking</a>、<a href="https://www.jaegertracing.io/">Jaeger</a>、<a href="https://zipkin.io/">Zipkin</a>。
+        Log tracing 有分單機版與分佈式版。要正確設定 log 的 granularity。Log 的內容至少要有 severity 與 time。Timestamp 在 fuction 的前後時點都要記，因為不知道過程中間的 latency 有多少。分佈式系統有一個很重要的問題：時間是誰給的？Google Borg 很強調全域的時間順序問題。Borg 演化成 Omega，再演化成 Kubernetes。
+    </p>
+    <p>
+      效能鐵三角：throughout, latency, memory footprint。分佈式系統提升 throughput, 但犧牲 data consistency。意思是分佈式系統無法做到 strong consistency，只能做到 eventually consistency。如果系統架構有 latency 問題，不建議把架構轉成 microservice。雖然 microservice 提高 throughput，但沒解決 latency 的問題。
+    </p>
+    <p>
+      資料庫的演化：RDBMS (relational database management system) 到 NoSQL 再到 NewSQL。NoSQL 的本質是 eventually consistency。NewSQL 則利用了 SSD (solid-state drive) 的特性。RDBMS 系列就只考慮兩種：MySQL 或 Postgre。Percona 把 MySQL Enterprise 版的功能 thread pool 重新開發了一遍，放在免費版。MySQL 的版本，Ant 會選官方版或 Percona，不選 MariaDB。Postgre 在 GIS (geographic information system) 有優勢。MySQL 的 read 效能，在 5.6 版最好，5.7 版的 read 效能下降，8.0 版的更降。MySQL 的 write 效能則是反過來，越後面的版本越好。這是因為 read 比較容易 scale，所以做這樣的設計。現在很多新產業用 <a href="https://firebase.google.com/">Firebase</a> 來存資料。可研究 <a href="https://github.com/cockroachdb/cockroach">CockroachDB</a>。CockroachDB 是 open source 界的 <a href="https://cloud.google.com/spanner">Google Spanner</a>。
+    </p>
+    <p>
+      一些讓我們思考的議題：
+    </p>
+    <ul>
+      <li>
+        1. Database 跟高併發的關係。例如 NoSQL / RDBMS 在不同場景的負載能力，如何選擇跟評估。
+      </li>
+      <li>
+        2. Server 端口的集中管理 / 微服務的必要性及適用場景規劃。例如已經了解整個 Application 的基本配置，要怎麼做出拓展，然後發展出 SOA、微服務的架構。
+      </li>
+      <li>
+        3. Domain Driven Design 對拓展性的影響。例如傳統單體式的設計跟 MVC 的相關性，要拆分成微服務後 DDD 的設計是否更有利？為什麼有些語言的框架設計都是採取 DDD 的方式？
+      </li>
+      <li>
+        4. 如何設計一個電商系統，可承載 100 萬人同時在線上，SLA 可達到 99.9% 的架構？
+      </li>
+      <li>
+        5. 請問 Computer Science 的 Bound Categories 有哪些？如何偵測出來？
+      </li>
+      <li>
+        6. Cache 的缺點有哪些？模式有哪些？什麼時候應該採用？
+      </li>
+      <li>
+        7. 高併發高流量與程式語言的哪些特性有關？程式語言選用時可以注意什麼？
+      </li>
+      <li>
+        8. 高併發高流量在各階段的架構演進可以如何設計？分佈式模型的引用？一致性的需求？
+      </li>
+    </ul>
+    <p>
+        Ant 提到效能的本質，就是 algorithms 與 data structures，例如這份投影片：<a href="https://is.gd/91OqFi">Efficiency with Algorithms, Performance with Data Structures</a>。為了理解運作的模式，Ant 有讀過 MySQL 等資料庫的原始碼。參加這次的 TGONext 活動，很有啟發，推薦給大家。
+    </p>
+  </body>
+</html>
